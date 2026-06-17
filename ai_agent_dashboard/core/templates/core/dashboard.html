@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antigravity Enterprise AI Control Room</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans h-screen flex flex-col overflow-hidden">
+
+    <header class="bg-slate-950 border-b border-slate-800 px-6 py-4 flex justify-between items-center z-10 shadow-lg">
+        <div class="flex items-center space-x-3">
+            <div class="bg-indigo-600 p-2 rounded-lg text-white animate-pulse">
+                <i class="fa-solid fa-atom text-xl"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold tracking-tight text-white">Antigravity AI Platform</h1>
+                <p class="text-xs text-indigo-400 font-mono">Engine Status: Operational via Django</p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-4">
+            <span class="text-sm bg-slate-800 px-3 py-1.5 rounded-full border border-slate-700 text-slate-300">
+                <i class="fa-solid fa-bolt text-amber-400 mr-1.5"></i> Gemini 2.5 Flash
+            </span>
+        </div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden relative">
+        
+        <aside class="w-80 bg-slate-950/50 border-r border-slate-800 flex flex-col h-full z-10 backdrop-blur-md">
+            <div class="p-4">
+                <a href="{% url 'create_new_session' %}" class="w-full flex items-center justify-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-3 px-4 rounded-xl transition duration-200 shadow-md shadow-indigo-900/20 group">
+                    <i class="fa-solid fa-plus transition-transform group-hover:rotate-90"></i>
+                    <span>New Agent Chat</span>
+                </a>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto px-3 space-y-1.5 pb-4">
+                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 mb-2">Saved Operations</p>
+                {% for s in sessions %}
+                    <a href="{% url 'chat_session_detail' s.id %}" class="flex items-center space-x-3 px-3 py-3 rounded-xl transition duration-150 group {% if active_session.id == s.id %} bg-indigo-950/50 border border-indigo-500/30 text-indigo-200 {% else %} text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 {% endif %}">
+                        <i class="fa-regular fa-comment-dots text-lg {% if active_session.id == s.id %} text-indigo-400 {% else %} text-slate-500 group-hover:text-slate-400 {% endif %}"></i>
+                        <span class="truncate text-sm font-medium flex-1">{{ s.title }}</span>
+                    </a>
+                {% empty %}
+                    <div class="text-center py-8 px-4 text-slate-600 border border-dashed border-slate-800 rounded-xl m-2">
+                        <i class="fa-regular fa-folder-open text-2xl mb-2 block"></i>
+                        <span class="text-xs font-mono">No active threads found</span>
+                    </div>
+                {% endfor %}
+            </div>
+        </aside>
+
+        <main class="flex-1 flex flex-col bg-slate-900 relative h-full">
+            {% if active_session %}
+                <div id="chat-messages" class="flex-1 overflow-y-auto p-6 space-y-6 scroll-smooth">
+                    {% for msg in messages %}
+                        <div class="flex space-x-4 {% if msg.role == 'user' %} justify-end {% endif %}">
+                            {% if msg.role != 'user' %}
+                                <div class="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold shrink-0 shadow-md">AI</div>
+                            {% endif %}
+                            
+                            <div class="max-w-3xl rounded-2xl px-5 py-3.5 shadow-md border {% if msg.role == 'user' %} bg-indigo-600 border-indigo-500 text-white rounded-tr-none {% else %} bg-slate-950 border-slate-800 text-slate-100 rounded-tl-none {% endif %}">
+                                <p class="text-sm leading-relaxed whitespace-pre-wrap">{{ msg.content }}</p>
+                                <span class="block text-[10px] mt-1.5 opacity-40 font-mono text-right">{{ msg.timestamp|date:"H:i" }}</span>
+                            </div>
+
+                            {% if msg.role == 'user' %}
+                                <div class="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center text-white font-bold shrink-0 shadow-md">U</div>
+                            {% endif %}
+                        </div>
+                    {% empty %}
+                        <div class="h-full flex flex-col items-center justify-center text-center text-slate-500 space-y-3">
+                            <div class="p-4 bg-slate-950 border border-slate-800 rounded-2xl text-indigo-400 shadow-xl">
+                                <i class="fa-solid fa-comments text-4xl animate-bounce"></i>
+                            </div>
+                            <div>
+                                <p class="text-base font-semibold text-slate-300">Channel Initialized</p>
+                                <p class="text-xs text-slate-500 max-w-sm mt-1">Send a prompt below. Ask about investment forecasts to watch the custom Google Antigravity calculations tool execute.</p>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+
+                <div id="ai-loader" class="hidden px-6 py-3 flex items-center space-x-3 bg-slate-950/40 border-t border-slate-800/50 text-indigo-400 font-mono text-xs">
+                    <i class="fa-solid fa-circle-notch animate-spin"></i>
+                    <span>Antigravity context loop orchestrating response state...</span>
+                </div>
+
+                <div class="p-4 bg-slate-950 border-t border-slate-800">
+                    <form id="chat-form" method="POST" action="{% url 'send_message_api' active_session.id %}" class="flex items-center space-x-3 max-w-5xl mx-auto">
+                        {% csrf_token %}
+                        <input type="text" name="message" id="message-input" autocomplete="off" placeholder="Ask your agent or request an investment growth projection..." class="flex-1 bg-slate-900 border border-slate-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-950 rounded-xl px-5 py-4 text-sm text-slate-100 placeholder-slate-500 outline-none transition duration-200 shadow-inner">
+                        <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 text-white p-4 rounded-xl transition duration-150 shadow-md flex items-center justify-center aspect-square">
+                            <i class="fa-solid fa-paper-plane text-base"></i>
+                        </button>
+                    </form>
+                </div>
+            {% else %}
+                <div class="h-full flex flex-col items-center justify-center text-center p-8 bg-slate-900">
+                    <div class="max-w-md space-y-6">
+                        <div class="inline-flex p-5 bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 rounded-3xl text-indigo-500 text-5xl shadow-2xl animate-pulse">
+                            <i class="fa-solid fa-terminal"></i>
+                        </div>
+                        <div class="space-y-2">
+                            <h2 class="text-2xl font-bold tracking-tight text-white">Welcome to your AI Agent Command Dashboard</h2>
+                            <p class="text-sm text-slate-400 leading-relaxed">Select an operational thread sequence from the left menu panel or create an entirely new channel session to deploy the Antigravity Agent engine workspace runtime.</p>
+                        </div>
+                        <a href="{% url 'create_new_session' %}" class="inline-flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-3 px-6 rounded-xl transition duration-150 shadow-lg shadow-indigo-950/50">
+                            <i class="fa-solid fa-circle-plus"></i>
+                            <span>Launch New Core Session</span>
+                        </a>
+                    </div>
+                </div>
+            {% endif %}
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const chatMessagesContainer = document.getElementById("chat-messages");
+            if (chatMessagesContainer) {
+                chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+            }
+
+            const chatForm = document.getElementById("chat-form");
+            if (chatForm) {
+                chatForm.addEventListener("submit", function(e) {
+                    e.preventDefault();
+                    const inputField = document.getElementById("message-input");
+                    const promptText = inputField.value.trim();
+                    if (!promptText) return;
+
+                    const loader = document.getElementById("ai-loader");
+                    const targetEndpoint = chatForm.getAttribute("action");
+                    const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+                    // Append user message instantly to screen UI
+                    const timestamp = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    const userHtml = `
+                        <div class="flex space-x-4 justify-end">
+                            <div class="max-w-3xl rounded-2xl px-5 py-3.5 bg-indigo-600 border border-indigo-500 text-white rounded-tr-none shadow-md">
+                                <p class="text-sm leading-relaxed whitespace-pre-wrap">${promptText}</p>
+                                <span class="block text-[10px] mt-1.5 opacity-40 font-mono text-right">${timestamp}</span>
+                            </div>
+                            <div class="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center text-white font-bold shrink-0 shadow-md">U</div>
+                        </div>
+                    `;
+                    chatMessagesContainer.insertAdjacentHTML('beforeend', userHtml);
+                    chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+                    inputField.value = "";
+                    loader.classList.remove("hidden");
+
+                    // Send Async AJAX Payload request to Django Endpoint Views Layer
+                    const formData = new FormData();
+                    formData.append("message", promptText);
+
+                    fetch(targetEndpoint, {
+                        method: "POST",
+                        headers: { "X-CSRFToken": csrftoken },
+                        body: formData
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        loader.classList.add("hidden");
+                        if (data.status === "success") {
+                            const aiHtml = `
+                                <div class="flex space-x-4">
+                                    <div class="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold shrink-0 shadow-md">AI</div>
+                                    <div class="max-w-3xl rounded-2xl px-5 py-3.5 bg-slate-950 border border-slate-800 text-slate-100 rounded-tl-none shadow-md">
+                                        <p class="text-sm leading-relaxed whitespace-pre-wrap">${data.ai_response}</p>
+                                        <span class="block text-[10px] mt-1.5 opacity-40 font-mono text-right">${timestamp}</span>
+                                    </div>
+                                </div>
+                            `;
+                            chatMessagesContainer.insertAdjacentHTML('beforeend', aiHtml);
+                            chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+                        } else {
+                            alert("Runtime Fault: " + data.error);
+                        }
+                    })
+                    .catch(error => {
+                        loader.classList.add("hidden");
+                        console.error("System pipeline error:", error);
+                    });
+                });
+            }
+        });
+    </script>
+</body>
+</html>
