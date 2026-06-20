@@ -1,0 +1,15 @@
+# Environment secrets
+.env
+
+# Python
+*.pyc
+__pycache__/
+venv/
+
+# Django
+db.sqlite3
+*.log
+
+# IDE
+.vscode/
+.idea/
