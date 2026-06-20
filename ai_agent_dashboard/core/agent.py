@@ -1,20 +1,17 @@
 import os
+import json
 import logging
 from typing import Optional
-import google.generativeai as genai
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
 def _get_api_key() -> str:
-    """Securely retrieve the Gemini API key from environment variables."""
-    api_key = os.getenv("GEMINI_API_KEY")
+    """Securely retrieve the OpenRouter API key from environment variables."""
+    api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
-        raise ValueError("GEMINI_API_KEY environment variable not set.")
-        
-    if api_key in ("AIzaSyYourActualKeyGoesHere", "PASTE_YOUR_ACTUAL_AIZASY_KEY_HERE"):
-        raise ValueError("GEMINI_API_KEY contains a placeholder value.")
+        raise ValueError("OPENROUTER_API_KEY environment variable not set.")
     return api_key
-
 
 def calculate_growth_projections(principal: float, annual_return: float, years: int) -> str:
     """Calculates future financial growth projections using compound interest."""
@@ -33,64 +30,98 @@ def calculate_growth_projections(principal: float, annual_return: float, years: 
     except Exception as e:
         return f"Calculation engine error: {str(e)}"
 
+# 1. Define the tool in the JSON Schema format required by OpenRouter
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "calculate_growth_projections",
+            "description": "Calculates future financial growth projections using compound interest.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "principal": {"type": "number", "description": "The initial investment amount"},
+                    "annual_return": {"type": "number", "description": "The annual interest rate in percent"},
+                    "years": {"type": "integer", "description": "The number of years the money is invested"}
+                },
+                "required": ["principal", "annual_return", "years"]
+            }
+        }
+    }
+]
 
 def query_ai_workflow(user_message: str, chat_history: Optional[list] = None) -> str:
-    """Executes a synchronous conversation session with clean tool loop integration."""
+    """Executes a conversation session via OpenRouter with tool loop integration."""
     try:
-        api_key = _get_api_key()
-        genai.configure(api_key=api_key)
-        
-        model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash",
-            system_instruction=(
-                "You are an advanced Enterprise AI Assistant built on Django. Be concise and professional. "
-                "If a user asks for any numerical projection, savings forecast, or compounding interest calculation, "
-                "always use your calculate_growth_projections tool to provide the answer."
-            ),
-            tools=[calculate_growth_projections]
+        # 2. Initialize the OpenAI client pointing to OpenRouter's URL
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=_get_api_key(),
         )
         
-        # Format the historical turns into clean dictionaries that the legacy SDK natively reads
-        formatted_history = []
+        # 3. Build the message history list
+        messages = [
+            {
+                "role": "system", 
+                "content": (
+                    "You are an advanced Enterprise AI Assistant built on Django. Be concise and professional. "
+                    "If a user asks for any numerical projection, savings forecast, or compounding interest calculation, "
+                    "always use your calculate_growth_projections tool to provide the answer."
+                )
+            }
+        ]
+        
         if chat_history:
-            for msg in chat_history:
-                role = "user" if msg.get("role") == "user" else "model"
-                formatted_history.append({
-                    "role": role,
-                    "parts": [msg.get("content", "")]
-                })
+            messages.extend(chat_history)
+            
+        messages.append({"role": "user", "content": user_message})
+
+        # 4. Send the request using the specific OpenRouter Gemini model ID
+        response = client.chat.completions.create(
+            model="google/gemini-3.5-flash",
+            messages=messages,
+            tools=tools,
+            max_tokens=1000
+        )
         
-        # Start the chat session pre-loaded with the working history structure
-        chat = model.start_chat(history=formatted_history)
+        response_message = response.choices[0].message
         
-        # Send the live user message
-        response = chat.send_message(user_message)
-        
-        # Automatic tool execution check loop
-        while response.function_calls:
-            for function_call in response.function_calls:
-                if function_call.name == "calculate_growth_projections":
-                    args = function_call.args
+        # 5. Check if the model decided to call the function
+        if response_message.tool_calls:
+            # Append the assistant's tool call request to the messages
+            messages.append(response_message)
+            
+            for tool_call in response_message.tool_calls:
+                if tool_call.function.name == "calculate_growth_projections":
+                    # Parse the arguments generated by the model
+                    args = json.loads(tool_call.function.arguments)
                     
-                    # Compute the local calculation tool results
+                    # Run your local Python math function
                     tool_result = calculate_growth_projections(
                         principal=args.get("principal"),
                         annual_return=args.get("annual_return"),
                         years=args.get("years")
                     )
                     
-                    # Return the tool answer to the model using a direct structured response dictionary
-                    response = chat.send_message({
-                        "parts": [{
-                            "function_response": {
-                                "name": function_call.name,
-                                "response": {"result": tool_result}
-                            }
-                        }]
+                    # Append the math result back to the messages so the model can read it
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": tool_result
                     })
-        
-        return response.text
-        
+            
+            # 6. Send the updated conversation back to the model to get the final natural language answer
+            final_response = client.chat.completions.create(
+                model="google/gemini-3.5-flash",
+                messages=messages,
+                tools=tools,
+                max_tokens=1000
+            )
+            return final_response.choices[0].message.content
+            
+        else:
+            return response_message.content
+
     except Exception as e:
         logger.error(f"Workflow failure: {e}")
         return f"System error occurred while building the AI workflow response: {str(e)}"
